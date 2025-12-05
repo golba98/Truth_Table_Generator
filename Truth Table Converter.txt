@@ -1,0 +1,150 @@
+EXPORT Truth_Table_Generator()
+BEGIN
+  LOCAL expr := "";
+  LOCAL level := 1;
+  
+  // Matrix vars
+  LOCAL num_vars, num_rows, num_cols, row, i, k;
+  LOCAL a_val, b_val, c_val, d_val;
+  LOCAL out_mat, headers; // Added headers list
+  LOCAL run_str, c, len, res;
+  LOCAL col_idx;
+  LOCAL show_not_a, show_not_b, show_not_c;
+
+  WHILE 1 DO
+
+    // -------------------------------
+    // Step 1: Input
+    // -------------------------------
+    IF level==1 THEN
+      // Fixed Hint: Changed "==" to "=" to prevent parsing errors
+      IF INPUT({ {expr,[2],{40,1},""} }, 
+               "Truth Table", 
+               {"Enter Logic"}, 
+               {"Use: x=XOR, >=Implies, =IFF, '=NOT"})==0 THEN 
+        RETURN; 
+      END;
+
+      IF expr=="" THEN expr:="AxB"; END;
+      // Remove spaces for cleaner parsing
+      expr := REPLACE(expr," ",""); 
+      level := 2;
+    END;
+
+    // -------------------------------
+    // Step 2: Compute
+    // -------------------------------
+    IF level==2 THEN
+      
+      // 1. Detect Variables (Case Insensitive)
+      num_vars := 2;
+      IF INSTRING(expr,"c") OR INSTRING(expr,"C") THEN num_vars := 3; END;
+      IF INSTRING(expr,"d") OR INSTRING(expr,"D") THEN num_vars := 4; END;
+
+      // 2. Detect Extra Columns
+      show_not_a := INSTRING(expr,"A'") OR INSTRING(expr,"a'");
+      show_not_b := INSTRING(expr,"B'") OR INSTRING(expr,"b'");
+      show_not_c := INSTRING(expr,"C'") OR INSTRING(expr,"c'");
+
+      // 3. Calculate Size
+      num_rows := 2^num_vars;
+      num_cols := num_vars + 1; // Basic cols + Result
+      
+      IF show_not_a THEN num_cols := num_cols + 1; END;
+      IF show_not_b THEN num_cols := num_cols + 1; END;
+      IF show_not_c AND num_vars >= 3 THEN num_cols := num_cols + 1; END;
+
+      out_mat := MAKEMAT(0, num_rows, num_cols);
+      headers := {}; // Initialize header list
+
+      // 4. Build Headers & Fill Matrix
+      // Add basic variable headers
+      headers := {"A", "B"};
+      IF num_vars >= 3 THEN headers := CONCAT(headers, {"C"}); END;
+      IF num_vars >= 4 THEN headers := CONCAT(headers, {"D"}); END;
+
+      FOR i FROM (num_rows - 1) DOWNTO 0 DO
+        row := num_rows - i;
+
+        // Binary counting logic
+        a_val := IP(i / (2^(num_vars-1))) MOD 2;
+        b_val := IP(i / (2^(num_vars-2))) MOD 2;
+        c_val := 0; d_val := 0;
+        
+        IF num_vars >= 3 THEN c_val := IP(i / (2^(num_vars-3))) MOD 2; END;
+        IF num_vars >= 4 THEN d_val := i MOD 2; END;
+
+        // Fill Input Columns
+        out_mat(row, 1) := a_val;
+        out_mat(row, 2) := b_val;
+        IF num_vars >= 3 THEN out_mat(row, 3) := c_val; END;
+        IF num_vars >= 4 THEN out_mat(row, 4) := d_val; END;
+
+        // Handle Extra Columns & Headers (Only add headers on first row loop)
+        col_idx := num_vars + 1;
+        
+        IF show_not_a THEN
+           out_mat(row, col_idx) := 1 - a_val;
+           IF row==1 THEN headers := CONCAT(headers, {"NOT A"}); END;
+           col_idx := col_idx + 1;
+        END;
+        IF show_not_b THEN
+           out_mat(row, col_idx) := 1 - b_val;
+           IF row==1 THEN headers := CONCAT(headers, {"NOT B"}); END;
+           col_idx := col_idx + 1;
+        END;
+        IF show_not_c AND num_vars >= 3 THEN
+           out_mat(row, col_idx) := 1 - c_val;
+           IF row==1 THEN headers := CONCAT(headers, {"NOT C"}); END;
+           col_idx := col_idx + 1;
+        END;
+
+        // Add Result Header last
+        IF row==1 THEN headers := CONCAT(headers, {"RESULT"}); END;
+
+        // 5. Evaluate Expression
+        run_str := "";
+        len := SIZE(expr);
+
+        FOR k FROM 1 TO len DO
+          c := MID(expr, k, 1);
+          
+          // Use CASE for cleaner logic
+          CASE
+            IF c=="A" OR c=="a" THEN run_str := run_str + STRING(a_val); END;
+            IF c=="B" OR c=="b" THEN run_str := run_str + STRING(b_val); END;
+            IF c=="C" OR c=="c" THEN run_str := run_str + STRING(c_val); END;
+            IF c=="D" OR c=="d" THEN run_str := run_str + STRING(d_val); END;
+            
+            // Logic Replacements
+            IF c=="n" OR c=="N" THEN run_str := run_str + " AND "; END;
+            IF c=="u" OR c=="U" THEN run_str := run_str + " OR "; END;
+            IF c=="'" THEN run_str := run_str + "==0"; END; // Postfix NOT
+            
+            // Operators
+            IF c==">" THEN run_str := run_str + "<="; END; // Implies logic
+            IF c=="=" THEN run_str := run_str + "=="; END; // IFF
+            IF c=="x" OR c=="X" THEN run_str := run_str + " XOR "; END; 
+            
+            // Passthrough
+            DEFAULT run_str := run_str + c;
+          END;
+        END;
+
+        IFERR res := EXPR(run_str); THEN 
+           MSGBOX("Error parsing: " + run_str); 
+           level:=1; 
+           BREAK; 
+        END;
+
+        out_mat(row, num_cols) := res;
+      END;
+
+      // 6. Display Table with Headers
+      // The second argument in EDITMAT adds column titles
+      EDITMAT(out_mat, headers, "Truth Table Result");
+      
+      level := 1;
+    END; 
+  END; 
+END;
